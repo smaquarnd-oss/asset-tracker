@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-성민 & 보현 부부 실시간 자산 관제 시스템 (Mobile Clean Version v9.2)
+성민 & 보현 부부 실시간 자산 관제 시스템 (Font Fixed Version v9.3)
 ================================================================================
 """
 
@@ -9,78 +9,45 @@ import io
 import datetime
 import urllib.request
 import json
-import pandas as pd
+import os
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import seaborn as sns
 from matplotlib.patches import Patch
+import pandas as pd
 import streamlit as st
-st.write("Streamlit version:", st.__version__)
 
-```python
-# 페이지 설정 (모바일 최적화 및 사이드바 완전 숨김)
+# 페이지 설정
 st.set_page_config(
     page_title="성민 & 보현 자산 관제",
     page_icon="💰",
     layout="centered",
-    initial_sidebar_state="locked"
+    initial_sidebar_state="collapsed"
 )
 
-# --- 모바일 Streamlit UI 깨짐 방지 ---
-# --- 모바일 Streamlit UI 및 Material Symbols 오류 방지 ---
-st.markdown("""
-<style>
-/* 모바일 사이드바 완전 숨김 */
-@media (max-width: 768px) {
-    [data-testid="stSidebar"],
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="stSidebarNav"] {
-        display: none !important;
-    }
-}
+# --- 폰트 깨짐 방지: 시스템 나눔고딕 강제 로드 ---
+def setup_korean_font():
+    # Streamlit Cloud(Linux) 환경의 나눔고딕 경로 탐색 및 등록
+    font_paths = [
+        '/usr/share/fonts/truetype/nanum/NanumGothic.ttf',
+        '/usr/share/fonts/NanumFont/NanumGothic.ttf',
+        '/usr/share/fonts/truetype/nanum/NanumBarunGothic.ttf'
+    ]
+    for path in font_paths:
+        if os.path.exists(path):
+            fm.fontManager.addfont(path)
+            font_name = fm.FontProperties(fname=path).get_name()
+            plt.rcParams['font.family'] = font_name
+            break
+    else:
+        # 윈도우 로컬 테스트 환경 대응
+        plt.rcParams['font.family'] = 'Malgun Gothic'
+        
+    plt.rcParams['axes.unicode_minus'] = False
 
-/* Streamlit Material Symbols가 아이콘 이름을 텍스트로 표시하는 현상 방지 */
-[data-testid="stIconMaterial"] {
-    font-family: "Material Symbols Rounded" !important;
-    font-weight: normal !important;
-    font-style: normal !important;
-    font-size: 24px !important;
-    line-height: 1 !important;
-    letter-spacing: normal !important;
-    text-transform: none !important;
-    white-space: nowrap !important;
-    word-wrap: normal !important;
-    direction: ltr !important;
-    -webkit-font-feature-settings: "liga" !important;
-    font-feature-settings: "liga" !important;
-    -webkit-font-smoothing: antialiased !important;
-}
-
-/* Material Symbols 폰트가 로드되지 않는 경우 아이콘 이름 자체를 노출하지 않음 */
-[data-testid="stIconMaterial"] {
-    overflow: hidden !important;
-    max-width: 24px !important;
-    max-height: 24px !important;
-}
-
-/* 비밀번호 입력창의 visibility 텍스트가 노출되는 경우 숨김 */
-[data-testid="stTextInput"] button [data-testid="stIconMaterial"] {
-    font-size: 0 !important;
-}
-
-[data-testid="stTextInput"] button [data-testid="stIconMaterial"]::before {
-    content: "●" !important;
-    font-family: sans-serif !important;
-    font-size: 10px !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# --- 폰트 및 한글 깨짐 방지 설정 ---
-plt.rcParams['font.family'] = 'Noto Sans CJK KR'
-plt.rcParams['axes.unicode_minus'] = False
+setup_korean_font()
 sns.set_theme(style="white")
-```
 
 # --- API 및 유틸리티 함수 ---
 
@@ -243,7 +210,7 @@ def get_snapshot_for_date(df_raw, target_date_str, group_cols, usd_krw, is_curre
     
     return df_latest, total_eval, total_buy
 
-# --- 📱 모바일 전용 메인 레이아웃 (어수선함 완전 제거) ---
+# --- 📱 모바일 전용 메인 레이아웃 ---
 
 st.title("💰 성민 & 보현 자산 관제")
 
@@ -252,14 +219,9 @@ SECRET_PASSWORD = "221008"
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
-# 1. 로그인 인증 (텍스트 입력 형식 정돈)
 if not st.session_state["authenticated"]:
     st.markdown("### 🔒 보안 인증")
-    entered_pw = st.text_input(
-    "접속 비밀번호 입력",
-    type="password",
-    key="clean_pw"
-    )
+    entered_pw = st.text_input("접속 비밀번호 입력", type="default", key="clean_pw")
     if st.button("접속하기", use_container_width=True):
         if entered_pw == SECRET_PASSWORD:
             st.session_state["authenticated"] = True
@@ -268,7 +230,6 @@ if not st.session_state["authenticated"]:
             st.error("비밀번호가 틀렸습니다.")
     st.stop()
 
-# 인증 완료 상태바
 top_c1, top_c2 = st.columns([3, 1])
 with top_c1:
     st.caption("✅ 시스템 정상 접속됨")
@@ -279,9 +240,8 @@ with top_c2:
 
 st.markdown("---")
 
-# 2. 데이터 입력 (Network Error 원천 차단을 위해 텍스트 복사/붙여넣기 전용 적용)
 st.subheader("📂 자산 데이터 입력")
-st.caption("모바일 네트워크 오류를 방지하기 위해 CSV 내용을 아래 칸에 복사·붙여넣기 해주세요.")
+st.caption("모바일 네트워크 오류 방지를 위해 CSV 내용을 아래 칸에 복사·붙여넣기 해주세요.")
 
 raw_csv_text = st.text_area(
     "CSV 데이터 입력", 
@@ -303,9 +263,8 @@ if raw_csv_text.strip():
     try:
         df_loaded = pd.read_csv(io.StringIO(raw_csv_text))
     except Exception as e:
-        st.error(f"CSV 파싱 오류 (데이터 형식을 확인해주세요): {e}")
+        st.error(f"CSV 파싱 오류: {e}")
 
-# 3. 데이터 분석 및 리포트 출력
 if df_loaded is not None:
     try:
         df = robust_column_mapping(df_loaded)
@@ -344,7 +303,6 @@ if df_loaded is not None:
             total_gain_curr = eval_curr - buy_curr
             total_return_curr = (total_gain_curr / buy_curr * 100) if buy_curr > 0 else 0.0
 
-            # 메트릭 요약
             st.subheader(f"📊 자산 현황 요약 ({dt_curr_str})")
             st.metric("현재 총 평가액", f"{eval_curr:,.0f} 원", f"{eval_curr/1e8:.3f} 억")
             
@@ -436,7 +394,7 @@ if df_loaded is not None:
                     if a_pct >= 4.0:
                         ax2.text(idx, y_pos, f"{a_eval/1e4:,.0f}만\n({a_pct:.1f}%)", 
                                  ha='center', va='center', fontsize=7.5, color='white', weight='bold')
-                    bottom_val += a_eval
+                        bottom_val += a_eval
 
                 ax2.text(idx, owner_total_eval/1e4 * 1.02,
                          f"{owner}\n{owner_total_eval/1e8:.2f}억 ({owner_pct:.1f}%)\n[{owner_ret:+.1f}%]",

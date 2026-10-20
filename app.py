@@ -24,7 +24,7 @@ st.set_page_config(
 )
 
 # --- 🔐 비밀번호 보안 설정 ---
-SECRET_PASSWORD = "1234" 
+SECRET_PASSWORD = "221008" 
 
 st.sidebar.header("🔐 보안 인증")
 user_password = st.sidebar.text_input("접속 비밀번호를 입력하세요", type="password")

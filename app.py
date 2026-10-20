@@ -185,9 +185,16 @@ def get_snapshot_for_date(df_raw, target_date_str, group_cols, usd_krw, is_curre
 
 # --- 📱 모바일 전용 메인 레이아웃 (Plotly 적용) ---
 
+# --- 📱 모바일 전용 메인 레이아웃 (Plotly 적용) ---
+
 st.title("💰 성민 & 보현 자산 관제")
 
-SECRET_PASSWORD = "1234" 
+# --- 🔐 보안 인증 (Streamlit Secrets 전용) ---
+if "PASSWORD" in st.secrets:
+    SECRET_PASSWORD = str(st.secrets["PASSWORD"])
+else:
+    st.error("🔒 시스템 설정 오류: Streamlit Secrets에 비밀번호가 설정되지 않았습니다.")
+    st.stop()
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -200,7 +207,7 @@ if not st.session_state["authenticated"]:
             st.session_state["authenticated"] = True
             st.rerun()
         else:
-            st.error("비밀번호가 틀렸습니다.")
+            st.error("비밀번호가 올바르지 않습니다.")
     st.stop()
 
 top_c1, top_c2 = st.columns([3, 1])

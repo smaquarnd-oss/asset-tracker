@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-성민 & 보현 부부 실시간 자산 관제 시스템 (Mobile-Optimized Web App v8.1)
+성민 & 보현 부부 실시간 자산 관제 시스템 (Mobile-First UI Optimized v8.2)
 ================================================================================
 """
 
@@ -23,19 +23,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- 🔐 비밀번호 보안 설정 ---
-SECRET_PASSWORD = "221008" 
-
-st.sidebar.header("🔐 보안 인증")
-user_password = st.sidebar.text_input("접속 비밀번호를 입력하세요", type="password")
-
-if user_password != SECRET_PASSWORD:
-    st.warning("🔒 자산 관제 시스템에 접속하려면 올바른 비밀번호를 입력해주세요.")
-    st.stop()
-
-st.sidebar.success("인증되었습니다.")
-
-# --- 폰트 및 스타일 설정 (한글 꺠짐 방지 완벽 반영) ---
+# --- 폰트 및 스타일 설정 (한글 깨짐 방지 완벽 반영) ---
 plt.rcParams['font.family'] = 'Malgun Gothic'
 plt.rcParams['axes.unicode_minus'] = False
 sns.set_theme(style="white")
@@ -201,20 +189,48 @@ def get_snapshot_for_date(df_raw, target_date_str, group_cols, usd_krw, is_curre
     
     return df_latest, total_eval, total_buy
 
-# --- Streamlit UI 본문 ---
+# --- Streamlit UI 본문 (모바일 세로 화면 최적화 배치) ---
 
 st.title("💰 성민 & 보현 자산 관제 시스템")
-st.markdown("핸드폰 화면에 최적화된 모바일 전용 자산 대시보드입니다.")
 
-st.sidebar.header("📁 데이터 및 설정")
-uploaded_file = st.sidebar.file_uploader("최신 자산 대장 CSV 업로드", type=['csv'])
+# --- 🔐 보안 인증 (메인 상단 배치로 모바일 가림 현상 원천 차단) ---
+SECRET_PASSWORD = "1234" 
+
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if not st.session_state["authenticated"]:
+    st.markdown("### 🔒 보안 인증이 필요합니다")
+    entered_pw = st.text_input("접속 비밀번호를 입력하세요", type="password", key="pw_input")
+    if st.button("인증하기"):
+        if entered_pw == SECRET_PASSWORD:
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("비밀번호가 틀렸습니다.")
+    st.stop()
+
+# 인증 완료 후 상단에 간단한 로그아웃/잠금 버튼 제공
+col_auth1, col_auth2 = st.columns([3, 1])
+with col_auth2:
+    if st.button("잠금"):
+        st.session_state["authenticated"] = False
+        st.rerun()
+
+st.markdown("---")
+
+# --- 📁 데이터 및 설정 (모바일 메인 상단 배치) ---
+st.subheader("📁 자산 대장 업로드 및 설정")
+uploaded_file = st.file_uploader("최신 자산 대장 CSV 파일 선택", type=['csv'])
 
 default_date = datetime.date.today()
-analysis_date = st.sidebar.date_input("분석 기준일", value=default_date)
+analysis_date = st.date_input("분석 기준일", value=default_date)
 analysis_date_str = analysis_date.strftime('%Y-%m-%d')
 
 auto_rate = get_usd_krw_rate()
-custom_rate = st.sidebar.number_input("원/달러 환율 (KRW/USD)", value=auto_rate, format="%.2f")
+custom_rate = st.number_input("원/달러 환율 (KRW/USD)", value=auto_rate, format="%.2f")
+
+st.markdown("---")
 
 if uploaded_file is not None:
     try:
@@ -377,7 +393,7 @@ if uploaded_file is not None:
                 st.pyplot(fig2)
 
                 # =============================================================
-                # [모바일 최적화 차트 3] 주요 종목별 자산 현황 (포맷팅 오류 수정 완료)
+                # [모바일 최적화 차트 3] 주요 종목별 자산 현황
                 # =============================================================
                 st.markdown("### ③ 주요 종목별 자산 현황")
                 fig3, ax3 = plt.subplots(figsize=(8, max(6, len(df_curr['종목'].unique()) * 0.35)))
@@ -416,7 +432,6 @@ if uploaded_file is not None:
                 
                 for p, pct, ret in zip(ax3.patches, pct_vals, ret_vals):
                     val = p.get_width()
-                    # 포맷팅 오류 수정 완료 (문자열 결합 방식 적용)
                     label_text = f" {val:,.0f}만 ({pct:.1f}% | {ret:+.1f}%)"
                     ax3.annotate(label_text, 
                                  (val, p.get_y() + p.get_height() / 2.),
@@ -428,7 +443,6 @@ if uploaded_file is not None:
                 ax3.set_xlabel("평가금액 (만원)", fontsize=9, weight='bold', fontname='Malgun Gothic')
                 ax3.set_ylabel("", fontsize=9)
                 
-                # Y축 레이블 폰트 강제 지정 (한글 깨짐 방지)
                 for label in ax3.get_yticklabels():
                     label.set_fontname('Malgun Gothic')
 
@@ -438,6 +452,6 @@ if uploaded_file is not None:
         else:
             st.error("CSV 파일을 읽어오지 못했습니다.")
     except Exception as e:
-        st.error(f"오류가 발생했습니다: {e}")
+        st.error(f"데이터 처리 중 오류가 발생했습니다: {e}")
 else:
-    st.info("👈 왼쪽 사이드바에서 비밀번호를 입력하고 최신 자산 대장 CSV 파일을 업로드해주세요.")
+    st.info("👆 위쪽에서 최신 자산 대장 CSV 파일을 업로드해주세요.")

@@ -27,21 +27,51 @@ st.set_page_config(
 )
 
 # --- 모바일 Streamlit UI 깨짐 방지 ---
+# --- 모바일 Streamlit UI 및 Material Symbols 오류 방지 ---
 st.markdown("""
 <style>
-/* 모바일에서 Streamlit 사이드바 및 사이드바 토글 버튼 숨김 */
+/* 모바일 사이드바 완전 숨김 */
 @media (max-width: 768px) {
-    [data-testid="stSidebar"] {
-        display: none !important;
-    }
-
-    [data-testid="stSidebarCollapsedControl"] {
-        display: none !important;
-    }
-
+    [data-testid="stSidebar"],
+    [data-testid="stSidebarCollapsedControl"],
     [data-testid="stSidebarNav"] {
         display: none !important;
     }
+}
+
+/* Streamlit Material Symbols가 아이콘 이름을 텍스트로 표시하는 현상 방지 */
+[data-testid="stIconMaterial"] {
+    font-family: "Material Symbols Rounded" !important;
+    font-weight: normal !important;
+    font-style: normal !important;
+    font-size: 24px !important;
+    line-height: 1 !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+    white-space: nowrap !important;
+    word-wrap: normal !important;
+    direction: ltr !important;
+    -webkit-font-feature-settings: "liga" !important;
+    font-feature-settings: "liga" !important;
+    -webkit-font-smoothing: antialiased !important;
+}
+
+/* Material Symbols 폰트가 로드되지 않는 경우 아이콘 이름 자체를 노출하지 않음 */
+[data-testid="stIconMaterial"] {
+    overflow: hidden !important;
+    max-width: 24px !important;
+    max-height: 24px !important;
+}
+
+/* 비밀번호 입력창의 visibility 텍스트가 노출되는 경우 숨김 */
+[data-testid="stTextInput"] button [data-testid="stIconMaterial"] {
+    font-size: 0 !important;
+}
+
+[data-testid="stTextInput"] button [data-testid="stIconMaterial"]::before {
+    content: "●" !important;
+    font-family: sans-serif !important;
+    font-size: 10px !important;
 }
 </style>
 """, unsafe_allow_html=True)

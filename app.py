@@ -77,7 +77,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 폰트 및 한글 깨짐 방지 설정 ---
-plt.rcParams['font.family'] = 'NanumGothic'
+plt.rcParams['font.family'] = 'Noto Sans CJK KR'
 plt.rcParams['axes.unicode_minus'] = False
 sns.set_theme(style="white")
 ```

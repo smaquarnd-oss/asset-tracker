@@ -16,6 +16,7 @@ import seaborn as sns
 from matplotlib.patches import Patch
 import streamlit as st
 
+```python
 # 페이지 설정 (모바일 최적화 및 사이드바 완전 숨김)
 st.set_page_config(
     page_title="성민 & 보현 자산 관제",
@@ -24,10 +25,31 @@ st.set_page_config(
     initial_sidebar_state="locked"
 )
 
+# --- 모바일 Streamlit UI 깨짐 방지 ---
+st.markdown("""
+<style>
+/* 모바일에서 Streamlit 사이드바 및 사이드바 토글 버튼 숨김 */
+@media (max-width: 768px) {
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+
+    [data-testid="stSidebarCollapsedControl"] {
+        display: none !important;
+    }
+
+    [data-testid="stSidebarNav"] {
+        display: none !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
 # --- 폰트 및 한글 깨짐 방지 설정 ---
 plt.rcParams['font.family'] = 'NanumGothic'
 plt.rcParams['axes.unicode_minus'] = False
 sns.set_theme(style="white")
+```
 
 # --- API 및 유틸리티 함수 ---
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-성민 & 보현 부부 실시간 자산 관제 시스템 (Font Fixed Version v9.3)
+성민 & 보현 부부 실시간 자산 관제 시스템 (Plotly Mobile Native Version v10.0)
 ================================================================================
 """
 
@@ -9,13 +9,9 @@ import io
 import datetime
 import urllib.request
 import json
-import os
-import matplotlib
-import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
-import seaborn as sns
-from matplotlib.patches import Patch
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 # 페이지 설정
@@ -25,29 +21,6 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="collapsed"
 )
-
-# --- 폰트 깨짐 방지: 시스템 나눔고딕 강제 로드 ---
-def setup_korean_font():
-    # Streamlit Cloud(Linux) 환경의 나눔고딕 경로 탐색 및 등록
-    font_paths = [
-        '/usr/share/fonts/truetype/nanum/NanumGothic.ttf',
-        '/usr/share/fonts/NanumFont/NanumGothic.ttf',
-        '/usr/share/fonts/truetype/nanum/NanumBarunGothic.ttf'
-    ]
-    for path in font_paths:
-        if os.path.exists(path):
-            fm.fontManager.addfont(path)
-            font_name = fm.FontProperties(fname=path).get_name()
-            plt.rcParams['font.family'] = font_name
-            break
-    else:
-        # 윈도우 로컬 테스트 환경 대응
-        plt.rcParams['font.family'] = 'Malgun Gothic'
-        
-    plt.rcParams['axes.unicode_minus'] = False
-
-setup_korean_font()
-sns.set_theme(style="white")
 
 # --- API 및 유틸리티 함수 ---
 
@@ -210,11 +183,11 @@ def get_snapshot_for_date(df_raw, target_date_str, group_cols, usd_krw, is_curre
     
     return df_latest, total_eval, total_buy
 
-# --- 📱 모바일 전용 메인 레이아웃 ---
+# --- 📱 모바일 전용 메인 레이아웃 (Plotly 적용) ---
 
 st.title("💰 성민 & 보현 자산 관제")
 
-SECRET_PASSWORD = "221008" 
+SECRET_PASSWORD = "1234" 
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -241,8 +214,6 @@ with top_c2:
 st.markdown("---")
 
 st.subheader("📂 자산 데이터 입력")
-st.caption("모바일 네트워크 오류 방지를 위해 CSV 내용을 아래 칸에 복사·붙여넣기 해주세요.")
-
 raw_csv_text = st.text_area(
     "CSV 데이터 입력", 
     height=140, 
@@ -312,149 +283,96 @@ if df_loaded is not None:
 
             st.markdown("---")
             
-            account_cats = ['ISA', 'PSA', 'IRP', 'CA', '공통/CMA']
             acc_colors = {
                 'ISA': '#2ecc71', 'PSA': '#3498db', 'IRP': '#9b59b6', 
                 'CA': '#e74c3c', '공통/CMA': '#f39c12'
             }
-            legend_elements = [
-                Patch(facecolor='#2ecc71', edgecolor='w', label='ISA'),
-                Patch(facecolor='#3498db', edgecolor='w', label='PSA'),
-                Patch(facecolor='#9b59b6', edgecolor='w', label='IRP'),
-                Patch(facecolor='#e74c3c', edgecolor='w', label='CA'),
-                Patch(facecolor='#f39c12', edgecolor='w', label='CMA')
-            ]
+            account_cats = list(acc_colors.keys())
 
-            # [차트 1] 총자산 추이
+            # =============================================================
+            # [Plotly 차트 1] 총자산 추이
+            # =============================================================
             st.markdown("### ① 총자산 추이 및 계좌별 현황")
-            fig1, ax1 = plt.subplots(figsize=(7, 5))
             periods = ['1년 전', '6개월 전', '현재']
             period_dfs = [df_y1, df_m6, df_curr]
             period_evals = [eval_y1, eval_m6, eval_curr]
-            bar_width = 0.45
-            x_indices = range(len(periods))
-
-            for idx, (p_df, p_eval) in enumerate(zip(period_dfs, period_evals)):
+            
+            chart1_data = []
+            for p_name, p_df, p_eval in zip(periods, period_dfs, period_evals):
                 if p_df is None or p_df.empty or p_eval == 0:
                     continue
-                bottom_val = 0
                 acc_summary = p_df.groupby('표준계좌종류')[['실시간평가금액', '매수금액']].sum()
                 for acc in account_cats:
                     if acc in acc_summary.index:
                         a_eval = acc_summary.loc[acc, '실시간평가금액']
-                        a_pct = (a_eval / p_eval * 100) if p_eval > 0 else 0
-                        
-                        ax1.bar(idx, a_eval/1e4, bottom=bottom_val/1e4, width=bar_width, 
-                                color=acc_colors[acc], edgecolor='white', linewidth=1)
-                        y_pos = (bottom_val + a_eval / 2) / 1e4
-                        if a_pct >= 4.0:
-                            ax1.text(idx, y_pos, f"{a_eval/1e4:,.0f}만\n({a_pct:.1f}%)", 
-                                     ha='center', va='center', fontsize=7.5, color='white', weight='bold')
-                        bottom_val += a_eval
+                        chart1_data.append({
+                            '시점': p_name,
+                            '계좌종류': acc,
+                            '평가금액(만원)': a_eval / 1e4
+                        })
+            
+            if chart1_data:
+                df_c1 = pd.DataFrame(chart1_data)
+                fig1 = px.bar(
+                    df_c1, x='시점', y='평가금액(만원)', color='계좌종류',
+                    color_discrete_map=acc_colors, text_auto='.0f'
+                )
+                fig1.update_layout(
+                    xaxis_title="", yaxis_title="평가금액 (만원)",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    margin=dict(l=10, r=10, t=30, b=10), height=380
+                )
+                st.plotly_chart(fig1, use_container_width=True)
 
-                p_buy = p_df['매수금액'].sum()
-                p_ret = ((p_eval - p_buy) / p_buy * 100) if p_buy > 0 else 0
-                ax1.text(idx, p_eval/1e4 * 1.02, f"{p_eval/1e8:.2f}억\n({p_ret:+.1f}%)", 
-                         ha='center', va='bottom', fontsize=8.5, weight='bold', color='#2c3e50')
-
-            ax1.legend(handles=legend_elements, loc='upper left', ncol=3, frameon=False, fontsize=7)
-            max_period_eval = max([v for v in period_evals if v > 0] or [100000])
-            ax1.set_ylim(0, max_period_eval/1e4 * 1.35)
-            ax1.set_xticks(x_indices)
-            ax1.set_xticklabels(periods, fontsize=8.5, weight='bold')
-            ax1.set_ylabel("평가금액 (만원)", fontsize=8.5, weight='bold')
-            sns.despine(top=True, right=True)
-            st.pyplot(fig1, use_container_width=True)
-
-            # [차트 2] 인물별 자산 현황
+            # =============================================================
+            # [Plotly 차트 2] 인물별 자산 현황
+            # =============================================================
             st.markdown("### ② 인물별 자산 현황")
-            fig2, ax2 = plt.subplots(figsize=(7, 5))
             owner_acc_grp = df_curr.groupby(['소유주명', '표준계좌종류'])[['실시간평가금액', '매수금액']].sum().reset_index()
-            owners = df_curr.groupby('소유주명')['실시간평가금액'].sum().sort_values(ascending=False).index
-            x_owner_idx = range(len(owners))
-            max_owner_eval = df_curr.groupby('소유주명')['실시간평가금액'].sum().max()
+            
+            chart2_data = []
+            for _, row in owner_acc_grp.iterrows():
+                chart2_data.append({
+                    '소유주': row['소유주명'],
+                    '계좌종류': row['표준계좌종류'],
+                    '평가금액(만원)': row['실시간평가금액'] / 1e4
+                })
+            
+            if chart2_data:
+                df_c2 = pd.DataFrame(chart2_data)
+                fig2 = px.bar(
+                    df_c2, x='소유주', y='평가금액(만원)', color='계좌종류',
+                    color_discrete_map=acc_colors, text_auto='.0f'
+                )
+                fig2.update_layout(
+                    xaxis_title="", yaxis_title="평가금액 (만원)",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    margin=dict(l=10, r=10, t=30, b=10), height=380
+                )
+                st.plotly_chart(fig2, use_container_width=True)
 
-            for idx, owner in enumerate(owners):
-                owner_df = owner_acc_grp[owner_acc_grp['소유주명'] == owner]
-                owner_total_eval = owner_df['실시간평가금액'].sum()
-                owner_total_buy = owner_df['매수금액'].sum()
-                owner_pct = (owner_total_eval / eval_curr * 100) if eval_curr > 0 else 0
-                owner_ret = ((owner_total_eval - owner_total_buy) / owner_total_buy * 100) if owner_total_buy > 0 else 0
-                
-                bottom_val = 0
-                for acc in account_cats:
-                    acc_match = owner_df[owner_df['표준계좌종류'] == acc]
-                    if acc_match.empty: continue
-                    a_eval = acc_match['실시간평가금액'].values[0]
-                    a_pct = (a_eval / owner_total_eval * 100) if owner_total_eval > 0 else 0
-                    
-                    ax2.bar(idx, a_eval/1e4, bottom=bottom_val/1e4, width=bar_width, 
-                            color=acc_colors[acc], edgecolor='white', linewidth=1)
-                    y_pos = (bottom_val + a_eval / 2) / 1e4
-                    if a_pct >= 4.0:
-                        ax2.text(idx, y_pos, f"{a_eval/1e4:,.0f}만\n({a_pct:.1f}%)", 
-                                 ha='center', va='center', fontsize=7.5, color='white', weight='bold')
-                        bottom_val += a_eval
-
-                ax2.text(idx, owner_total_eval/1e4 * 1.02,
-                         f"{owner}\n{owner_total_eval/1e8:.2f}억 ({owner_pct:.1f}%)\n[{owner_ret:+.1f}%]",
-                         ha='center', va='bottom', fontsize=8.5, weight='bold', color='#2c3e50')
-
-            ax2.set_ylim(0, max_owner_eval/1e4 * 1.35)
-            ax2.set_xticks(x_owner_idx)
-            ax2.set_xticklabels(owners, fontsize=8.5, weight='bold')
-            ax2.set_ylabel("평가금액 (만원)", fontsize=8.5, weight='bold')
-            sns.despine(top=True, right=True)
-            st.pyplot(fig2, use_container_width=True)
-
-            # [차트 3] 주요 종목별 자산 현황
+            # =============================================================
+            # [Plotly 차트 3] 주요 종목별 자산 현황
+            # =============================================================
             st.markdown("### ③ 주요 종목별 자산 현황")
             df_curr['통합종목명'] = df_curr.apply(lambda r: map_underlying_asset(r['종목'], r['종목코드']), axis=1)
             item_grp = df_curr.groupby('통합종목명')[['실시간평가금액', '매수금액']].sum().reset_index()
             item_grp['비중(%)'] = (item_grp['실시간평가금액'] / eval_curr * 100).round(2)
             item_grp['수익률(%)'] = ((item_grp['실시간평가금액'] - item_grp['매수금액']) / item_grp['매수금액'] * 100).fillna(0).round(2)
             
-            main_items = item_grp[item_grp['비중(%)'] > 1.0].copy().sort_values('실시간평가금액', ascending=False)
-            small_items = item_grp[item_grp['비중(%)'] <= 1.0]
+            main_items = item_grp[item_grp['비중(%)'] > 1.0].copy().sort_values('실시간평가금액', ascending=True)
             
-            if not small_items.empty:
-                small_eval = small_items['실시간평가금액'].sum()
-                small_buy = small_items['매수금액'].sum()
-                etc_row = pd.DataFrame([{
-                    '통합종목명': '기타 소액 종목',
-                    '실시간평가금액': small_eval,
-                    '매수금액': small_buy,
-                    '비중(%)': (small_eval / eval_curr * 100),
-                    '수익률(%)': ((small_eval - small_buy) / small_buy * 100) if small_buy > 0 else 0
-                }])
-                chart3_df = pd.concat([main_items, etc_row], ignore_index=True)
-            else:
-                chart3_df = main_items.copy()
-
-            fig3, ax3 = plt.subplots(figsize=(7, max(4, len(chart3_df) * 0.45)))
-            y_names = chart3_df['통합종목명']
-            x_evals_10k = chart3_df['실시간평가금액'] / 1e4
-            pct_vals = chart3_df['비중(%)']
-            ret_vals = chart3_df['수익률(%)']
-            
-            palette_colors = ['#34495e' if name == '기타 소액 종목' else sns.color_palette('Blues_r', len(chart3_df))[i] 
-                              for i, name in enumerate(y_names)]
-                              
-            sns.barplot(x=x_evals_10k, y=y_names, hue=y_names, ax=ax3, palette=palette_colors, legend=False)
-            
-            for p, pct, ret in zip(ax3.patches, pct_vals, ret_vals):
-                val = p.get_width()
-                label_text = f" {val:,.0f}만 ({pct:.1f}% | {ret:+.1f}%)"
-                ax3.annotate(label_text, 
-                             (val, p.get_y() + p.get_height() / 2.),
-                             ha='left', va='center', fontsize=7.5, weight='bold')
-
-            max_item_eval = max(x_evals_10k) if len(x_evals_10k) > 0 else 1000
-            ax3.set_xlim(0, max_item_eval * 1.35)
-            ax3.set_xlabel("평가금액 (만원)", fontsize=8.5, weight='bold')
-            ax3.set_ylabel("", fontsize=8.5)
-            sns.despine(top=True, right=True)
-            st.pyplot(fig3, use_container_width=True)
+            if not main_items.empty:
+                fig3 = px.bar(
+                    main_items, x=main_items['실시간평가금액'] / 1e4, y='통합종목명',
+                    orientation='h', text=main_items['실시간평가금액'] / 1e4
+                )
+                fig3.update_traces(texttemplate='%{text:,.0f}만', textposition='outside')
+                fig3.update_layout(
+                    xaxis_title="평가금액 (만원)", yaxis_title="",
+                    margin=dict(l=10, r=20, t=20, b=10), height=max(350, len(main_items) * 35)
+                )
+                st.plotly_chart(fig3, use_container_width=True)
 
     except Exception as e:
         st.error(f"데이터 분석 중 오류가 발생했습니다: {e}")

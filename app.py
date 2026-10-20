@@ -194,7 +194,7 @@ def get_snapshot_for_date(df_raw, target_date_str, group_cols, usd_krw, is_curre
 st.title("💰 성민 & 보현 자산 관제 시스템")
 
 # --- 🔐 보안 인증 (메인 상단 배치로 모바일 가림 현상 원천 차단) ---
-SECRET_PASSWORD = "1234" 
+SECRET_PASSWORD = "221008" 
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-성민 & 보현 부부 실시간 자산 관제 시스템 (Mobile Perfect Native v9.0)
+성민 & 보현 부부 실시간 자산 관제 시스템 (Mobile Clean Version v9.2)
 ================================================================================
 """
 
@@ -16,7 +16,7 @@ import seaborn as sns
 from matplotlib.patches import Patch
 import streamlit as st
 
-# 페이지 설정 (모바일 최적화 레이아웃, 사이드바 자동 숨김 설정)
+# 페이지 설정 (모바일 최적화 및 사이드바 완전 숨김)
 st.set_page_config(
     page_title="성민 & 보현 자산 관제",
     page_icon="💰",
@@ -24,18 +24,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 폰트 및 모바일 서버 한글 깨짐 방지 완벽 설정 ---
-# Streamlit Cloud (Linux) 및 Windows 환경 모두 대응 가능한 한글 폰트 탐색
-font_names = [f.name for f in fm.fontManager.ttflist]
-if 'NanumGothic' in font_names:
-    plt.rcParams['font.family'] = 'NanumGothic'
-elif 'Malgun Gothic' in font_names:
-    plt.rcParams['font.family'] = 'Malgun Gothic'
-elif 'AppleGothic' in font_names:
-    plt.rcParams['font.family'] = 'AppleGothic'
-else:
-    plt.rcParams['font.family'] = 'sans-serif'
-
+# --- 폰트 및 한글 깨짐 방지 설정 ---
+plt.rcParams['font.family'] = 'NanumGothic'
 plt.rcParams['axes.unicode_minus'] = False
 sns.set_theme(style="white")
 
@@ -200,7 +190,7 @@ def get_snapshot_for_date(df_raw, target_date_str, group_cols, usd_krw, is_curre
     
     return df_latest, total_eval, total_buy
 
-# --- 📱 모바일 전용 메인 레이아웃 구성 ---
+# --- 📱 모바일 전용 메인 레이아웃 (어수선함 완전 제거) ---
 
 st.title("💰 성민 & 보현 자산 관제")
 
@@ -209,59 +199,40 @@ SECRET_PASSWORD = "221008"
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
-# 1. 로그인 영역 (메인 화면 카드 구성)
+# 1. 로그인 인증 (텍스트 입력 형식 정돈)
 if not st.session_state["authenticated"]:
-    with st.container():
-        st.subheader("🔒 시스템 인증")
-        entered_pw = st.text_input("비밀번호 입력", type="password", key="m_pw")
-        if st.button("접속하기", use_container_width=True):
-            if entered_pw == SECRET_PASSWORD:
-                st.session_state["authenticated"] = True
-                st.rerun()
-            else:
-                st.error("비밀번호가 올바르지 않습니다.")
+    st.markdown("### 🔒 보안 인증")
+    entered_pw = st.text_input("접속 비밀번호 입력", type="default", key="clean_pw")
+    if st.button("접속하기", use_container_width=True):
+        if entered_pw == SECRET_PASSWORD:
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("비밀번호가 틀렸습니다.")
     st.stop()
 
-# 인증 완료 시 상단 헤더
-header_col1, header_col2 = st.columns([3, 1])
-with header_col1:
-    st.caption("✅ 인증됨 | 실시간 관제 중")
-with header_col2:
-    if st.button("잠금", key="logout_btn", use_container_width=True):
+# 인증 완료 상태바
+top_c1, top_c2 = st.columns([3, 1])
+with top_c1:
+    st.caption("✅ 시스템 정상 접속됨")
+with top_c2:
+    if st.button("잠금", use_container_width=True):
         st.session_state["authenticated"] = False
         st.rerun()
 
 st.markdown("---")
 
-# 2. 데이터 입력 영역 (Network Error 방지를 위한 파일업로드 + 텍스트붙여넣기 듀얼 모드)
-st.subheader("📂 데이터 및 설정")
+# 2. 데이터 입력 (Network Error 원천 차단을 위해 텍스트 복사/붙여넣기 전용 적용)
+st.subheader("📂 자산 데이터 입력")
+st.caption("모바일 네트워크 오류를 방지하기 위해 CSV 내용을 아래 칸에 복사·붙여넣기 해주세요.")
 
-input_method = st.radio("업로드 방식 선택", ["CSV 파일 파일 선택", "CSV 내용 복사/붙여넣기"], horizontal=True)
+raw_csv_text = st.text_area(
+    "CSV 데이터 입력", 
+    height=140, 
+    placeholder="날짜,소유주,계좌종류,종목,종목코드,수량,평가금액,매수금액..."
+)
 
-df_loaded = None
-
-if input_method == "CSV 파일 파일 선택":
-    uploaded_file = st.file_uploader("자산 대장 CSV 선택", type=['csv'], help="모바일 업로드 시 오류가 나면 '복사/붙여넣기' 방식을 이용하세요.")
-    if uploaded_file is not None:
-        try:
-            bytes_data = uploaded_file.getvalue()
-            for enc in ['utf-8-sig', 'cp949', 'euc-kr', 'utf-8']:
-                try:
-                    df_loaded = pd.read_csv(io.BytesIO(bytes_data), encoding=enc)
-                    break
-                except Exception:
-                    continue
-        except Exception as e:
-            st.error(f"파일을 읽는 도중 오류가 발생했습니다: {e}")
-else:
-    raw_csv_text = st.text_area("CSV 파일 전체 내용을 여기에 붙여넣으세요", height=150, placeholder="날짜,소유주,계좌종류,종목...")
-    if raw_csv_text.strip():
-        try:
-            df_loaded = pd.read_csv(io.StringIO(raw_csv_text))
-        except Exception as e:
-            st.error(f"텍스트 파싱 오류: {e}")
-
-with st.expander("⚙️ 분석 세부 설정 (기준일 / 환율)"):
+with st.expander("⚙️ 분석 기준일 및 환율 설정"):
     default_date = datetime.date.today()
     analysis_date = st.date_input("분석 기준일", value=default_date)
     analysis_date_str = analysis_date.strftime('%Y-%m-%d')
@@ -270,7 +241,14 @@ with st.expander("⚙️ 분석 세부 설정 (기준일 / 환율)"):
 
 st.markdown("---")
 
-# 3. 데이터 분석 및 모바일 리포트 출력
+df_loaded = None
+if raw_csv_text.strip():
+    try:
+        df_loaded = pd.read_csv(io.StringIO(raw_csv_text))
+    except Exception as e:
+        st.error(f"CSV 파싱 오류 (데이터 형식을 확인해주세요): {e}")
+
+# 3. 데이터 분석 및 리포트 출력
 if df_loaded is not None:
     try:
         df = robust_column_mapping(df_loaded)
@@ -300,7 +278,7 @@ if df_loaded is not None:
         dt_m6_str = m6_dt.strftime('%Y-%m-%d')
         dt_curr_str = curr_dt.strftime('%Y-%m-%d')
         
-        with st.spinner("⚡ 실시간 시세 조회 및 자산 계산 중..."):
+        with st.spinner("⚡ 실시간 시세 반영 및 자산 연산 중..."):
             df_y1, eval_y1, buy_y1 = get_snapshot_for_date(df, dt_y1_str, group_cols, custom_rate, is_current_period=False)
             df_m6, eval_m6, buy_m6 = get_snapshot_for_date(df, dt_m6_str, group_cols, custom_rate, is_current_period=False)
             df_curr, eval_curr, buy_curr = get_snapshot_for_date(df, dt_curr_str, group_cols, custom_rate, is_current_period=True)
@@ -309,7 +287,7 @@ if df_loaded is not None:
             total_gain_curr = eval_curr - buy_curr
             total_return_curr = (total_gain_curr / buy_curr * 100) if buy_curr > 0 else 0.0
 
-            # 메트릭 모바일 세로 배치
+            # 메트릭 요약
             st.subheader(f"📊 자산 현황 요약 ({dt_curr_str})")
             st.metric("현재 총 평가액", f"{eval_curr:,.0f} 원", f"{eval_curr/1e8:.3f} 억")
             
@@ -464,6 +442,6 @@ if df_loaded is not None:
             st.pyplot(fig3, use_container_width=True)
 
     except Exception as e:
-        st.error(f"데이터 처리 중 오류가 발생했습니다: {e}")
+        st.error(f"데이터 분석 중 오류가 발생했습니다: {e}")
 else:
-    st.info("👆 위 영역에서 CSV 파일을 선택하거나 텍스트를 붙여넣어주세요.")
+    st.info("👆 위 입력 칸에 최신 자산 대장 CSV 내용을 복사해서 붙여넣어 주세요.")

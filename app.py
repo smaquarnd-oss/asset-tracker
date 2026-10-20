@@ -21,7 +21,7 @@ st.set_page_config(
     page_title="성민 & 보현 자산 관제",
     page_icon="💰",
     layout="centered",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="locked"
 )
 
 # --- 폰트 및 한글 깨짐 방지 설정 ---
@@ -202,7 +202,11 @@ if "authenticated" not in st.session_state:
 # 1. 로그인 인증 (텍스트 입력 형식 정돈)
 if not st.session_state["authenticated"]:
     st.markdown("### 🔒 보안 인증")
-    entered_pw = st.text_input("접속 비밀번호 입력", type="default", key="clean_pw")
+    entered_pw = st.text_input(
+    "접속 비밀번호 입력",
+    type="password",
+    key="clean_pw"
+    )
     if st.button("접속하기", use_container_width=True):
         if entered_pw == SECRET_PASSWORD:
             st.session_state["authenticated"] = True

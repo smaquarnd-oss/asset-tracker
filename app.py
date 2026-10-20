@@ -15,6 +15,7 @@ import matplotlib.font_manager as fm
 import seaborn as sns
 from matplotlib.patches import Patch
 import streamlit as st
+st.write("Streamlit version:", st.__version__)
 
 ```python
 # 페이지 설정 (모바일 최적화 및 사이드바 완전 숨김)

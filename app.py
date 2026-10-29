@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-성민 & 보현 부부 실시간 자산 관제 시스템 (v11.0 - CSV 업로드 / 모바일 대응)
+실시간 자산 관제 시스템 (v12.0 - 글래스 디자인 / 월말 추이 / 소유주 자동 인식)
 ================================================================================
 CSV 형식 (헤더 1줄 + 보유 종목 1줄씩):
     날짜,소유주명,계좌ID,평가금액,매수금액,평가손익,수량,평균단가,종목,종목코드,통화
@@ -25,7 +25,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 st.set_page_config(
-    page_title="성민 & 보현 자산 관제",
+    page_title="자산 관제",
     page_icon="💰",
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -44,51 +44,105 @@ st.html(
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block');
+:root {
+    --glass-bg: rgba(255, 255, 255, 0.08);
+    --glass-border: rgba(255, 255, 255, 0.16);
+    --ink: #f4f5ff;
+    --ink-2: rgba(244, 245, 255, 0.68);
+    --up: #ff8fa3;
+    --down: #7cc4ff;
+}
 html, body, .stApp, .stMarkdown, .stCaption, p, h1, h2, h3, h4, label, input, button, textarea {
     font-family: 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Nanum Gothic', sans-serif;
 }
-/* 아이콘 폰트 보호 */
 [data-testid="stIconMaterial"], .material-symbols-rounded {
     font-family: 'Material Symbols Rounded' !important;
 }
-/* 업로드 영역의 장식 아이콘은 숨김 (폰트 실패 시 'upload' 글자 노출 방지) */
 [data-testid="stFileUploaderDropzone"] [data-testid="stIconMaterial"] { display: none; }
 
+/* 배경: 짙은 그라데이션 + 은은한 색 번짐 (blur 필터 없이 radial-gradient로 → 모바일에서도 가벼움) */
+.stApp {
+    background: linear-gradient(160deg, #161a42 0%, #261a4a 45%, #0e2643 100%) !important;
+    color: var(--ink);
+}
+.stApp::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+        radial-gradient(420px circle at 88% 6%, rgba(124, 92, 255, 0.40), transparent 70%),
+        radial-gradient(380px circle at 0% 45%, rgba(0, 184, 212, 0.28), transparent 70%),
+        radial-gradient(360px circle at 100% 95%, rgba(232, 67, 147, 0.28), transparent 70%);
+}
+[data-testid="stHeader"] { background: transparent !important; }
+[data-testid="stToolbar"] { opacity: 0.6; }
+
+/* 유리 카드: key가 glass 로 시작하는 st.container + HTML 카드 */
+[class*="st-key-glass"], .glass {
+    background: var(--glass-bg) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 18px !important;
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+[class*="st-key-glass"] { padding: 14px 14px 6px !important; }
+[class*="st-key-glass"] h4 { font-size: 1rem !important; margin: 0 0 2px !important; padding: 0 !important; }
+
 /* 모바일 여백/글자 크기 */
-.block-container { padding-top: 2.2rem; padding-bottom: 3rem; }
+.block-container { padding-top: 2.2rem; padding-bottom: 3rem; position: relative; z-index: 1; }
 @media (max-width: 640px) {
     .block-container { padding-left: 0.9rem; padding-right: 0.9rem; }
-    h1 { font-size: 1.45rem !important; }
-    h3 { font-size: 1.1rem !important; }
 }
 
-/* 요약 카드 (st.metric 대신: 화살표 아이콘 없이 ▲▼ 문자만 사용) */
-.kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 6px 0 4px; }
-.kpi { border: 1px solid rgba(128,128,128,0.25); border-radius: 12px; padding: 12px 14px; min-width: 0; }
-.kpi.wide { grid-column: 1 / -1; }
-.kpi .lbl { font-size: 0.8rem; opacity: 0.7; margin-bottom: 2px; }
-.kpi .val { font-size: 1.25rem; font-weight: 700; line-height: 1.3; word-break: keep-all; overflow-wrap: anywhere; }
-.kpi.wide .val { font-size: 1.6rem; }
-.kpi .sub { font-size: 0.82rem; margin-top: 2px; opacity: 0.85; }
-.up { color: #d6336c; }     /* 국내 관례: 상승 = 빨강 */
-.down { color: #1c7ed6; }   /* 하락 = 파랑 */
+/* 상단 제목 */
+.app-head .t { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.3px; line-height: 1.3; }
+.app-head .s { font-size: 0.8rem; color: var(--ink-2); margin-top: 2px; }
+
+/* 요약 카드 */
+.kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 6px 0 8px; }
+.kpi { padding: 13px 14px; min-width: 0; }
+.kpi.wide { grid-column: 1 / -1; padding: 16px; }
+.kpi .lbl { font-size: 0.78rem; color: var(--ink-2); margin-bottom: 2px; }
+.kpi .val { font-size: 1.2rem; font-weight: 700; line-height: 1.3; word-break: keep-all; overflow-wrap: anywhere; }
+.kpi.wide .val { font-size: 1.85rem; letter-spacing: -0.5px; }
+.kpi .sub { font-size: 0.8rem; margin-top: 3px; color: var(--ink-2); }
+.up { color: var(--up) !important; }
+.down { color: var(--down) !important; }
 @media (max-width: 380px) {
-    .kpi .val { font-size: 1.05rem; }
-    .kpi.wide .val { font-size: 1.35rem; }
+    .kpi .val { font-size: 1.02rem; }
+    .kpi.wide .val { font-size: 1.5rem; }
 }
+
+/* 종목 리스트 */
+.items .it { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 0; font-size: 0.88rem; }
+.items .it + .it { border-top: 1px solid rgba(255, 255, 255, 0.10); }
+.items .nm { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.items .nm span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.items .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.items .v { white-space: nowrap; text-align: right; }
+.items .v small { display: block; font-size: 0.72rem; color: var(--ink-2); }
+.pill { font-size: 0.7rem; padding: 2px 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.14); margin-left: 6px; }
+
+/* 구분선/캡션 */
+hr { border-color: rgba(255, 255, 255, 0.12) !important; }
+[data-testid="stCaptionContainer"] { color: var(--ink-2) !important; }
+
+/* 제목 줄: 모바일에서도 제목과 잠금 버튼을 한 줄에 */
+.st-key-headrow [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; gap: 8px; }
+.st-key-headrow [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; }
+.st-key-headrow [data-testid="stColumn"]:last-child { flex: 0 0 72px !important; }
+.st-key-headrow [data-testid="stColumn"]:first-child { flex: 1 1 auto !important; }
 </style>
 """
 )
 
 # 계좌 유형별 색 (검증된 범주형 팔레트 1~5번, 고정 순서)
 ACC_ORDER = ["ISA", "PSA", "IRP", "CA", "CMA"]
-ACC_COLORS = {"ISA": "#2a78d6", "PSA": "#eb6834", "IRP": "#1baf7a", "CA": "#eda100", "CMA": "#e87ba4"}
+ACC_COLORS = {"ISA": "#3987e5", "PSA": "#d95926", "IRP": "#199e70", "CA": "#c98500", "CMA": "#d55181"}  # 어두운 배경용 단계
 ACC_LABELS = {"ISA": "ISA", "PSA": "연금저축(PSA)", "IRP": "IRP", "CA": "일반(CA)", "CMA": "현금(CMA)"}
 
 STD_COLS = ["날짜", "소유주명", "계좌ID", "평가금액", "매수금액", "평가손익", "수량", "평균단가", "종목", "종목코드", "통화"]
 NUM_COLS = ["평가금액", "매수금액", "평가손익", "수량", "평균단가"]
 
 PLOTLY_CONFIG = {"displayModeBar": False, "scrollZoom": False, "responsive": True}
+ITEM_COLOR = "#8c7cff"
 
 
 # =============================================================================
@@ -134,6 +188,58 @@ def get_live_prices(kr_codes, us_codes):
     with ThreadPoolExecutor(max_workers=8) as ex:
         results = list(ex.map(lambda j: (j[0], j[1](j[0])), jobs))
     return {k: v for k, v in results if v is not None}
+
+
+# --- 과거 시세 (월말 추정용) ---
+def _kr_history(code, start, end):
+    """네이버 일별 시세 → {날짜: 종가}"""
+    url = (
+        "https://api.finance.naver.com/siseJson.naver?symbol={}&requestType=1"
+        "&startTime={}&endTime={}&timeframe=day"
+    ).format(code, start.replace("-", ""), end.replace("-", ""))
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            text = resp.read().decode("utf-8", errors="ignore")
+        rows = re.findall(r'\["(\d{8})",\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)', text)
+        return {pd.Timestamp(r[0]): float(r[4]) for r in rows}
+    except Exception:
+        return {}
+
+
+def _yahoo_history(symbol, start, end):
+    """야후 일별 시세(해외 종목, 환율 KRW=X) → {날짜: 종가}"""
+    p1 = int(pd.Timestamp(start).timestamp())
+    p2 = int(pd.Timestamp(end).timestamp()) + 86400
+    try:
+        data = _fetch_json(
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?period1={p1}&period2={p2}&interval=1d"
+        )
+        r = data["chart"]["result"][0]
+        closes = r["indicators"]["quote"][0]["close"]
+        return {
+            pd.Timestamp(t, unit="s").normalize(): float(c)
+            for t, c in zip(r["timestamp"], closes) if c is not None
+        }
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def get_price_history(kr_codes, us_codes, start, end):
+    """{종목코드: {날짜: 종가}}. 환율은 'KRW=X' 키. 실패한 종목은 빠짐."""
+    jobs = [(c, _kr_history) for c in kr_codes] + [(t, _yahoo_history) for t in (*us_codes, "KRW=X")]
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(lambda j: (j[0], j[1](j[0], start, end)), jobs))
+    return {k: v for k, v in results if v}
+
+
+def price_on(hist, date, max_gap_days=10):
+    """date 이전 가장 가까운 거래일 종가 (주말/휴일 대응)."""
+    if not hist:
+        return None
+    cands = [d for d in hist if date - pd.Timedelta(days=max_gap_days) <= d <= date]
+    return hist[max(cands)] if cands else None
 
 
 # =============================================================================
@@ -378,23 +484,25 @@ def kpi_cards(cards):
     for c in cards:
         cls = "kpi wide" if c.get("wide") else "kpi"
         sub = f'<div class="sub">{c["sub"]}</div>' if c.get("sub") else ""
-        html += f'<div class="{cls}"><div class="lbl">{c["label"]}</div><div class="val">{c["value"]}</div>{sub}</div>'
+        html += f'<div class="{cls} glass"><div class="lbl">{c["label"]}</div><div class="val">{c["value"]}</div>{sub}</div>'
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
 
 def style_fig(fig, height):
     fig.update_layout(
-        font=dict(family=FONT_STACK, size=12),
+        font=dict(family=FONT_STACK, size=12, color="rgba(244,245,255,0.85)"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=height,
-        margin=dict(l=8, r=8, t=60, b=8),
+        margin=dict(l=52, r=10, t=60, b=40),
         legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="left", x=0, title_text=""),
         dragmode=False,
-        hoverlabel=dict(font_family=FONT_STACK),
+        hoverlabel=dict(font_family=FONT_STACK, bgcolor="rgba(22,24,60,0.95)", bordercolor="rgba(255,255,255,0.3)", font_color="#f4f5ff"),
         bargap=0.25,
     )
-    fig.update_xaxes(fixedrange=True, showgrid=False)
-    fig.update_yaxes(fixedrange=True, gridcolor="rgba(128,128,128,0.18)")
+    fig.update_xaxes(fixedrange=True, showgrid=False, linecolor="rgba(255,255,255,0.15)")
+    fig.update_yaxes(fixedrange=True, gridcolor="rgba(255,255,255,0.10)", zeroline=False)
     return fig
 
 
@@ -408,7 +516,7 @@ def stacked_by_account(df_plot, x_col, x_order, height, label_last_only=False):
             x=x_order,
             y=part["평가_만원"].fillna(0),
             name=ACC_LABELS[acc],
-            marker=dict(color=ACC_COLORS[acc], line=dict(width=1, color="rgba(255,255,255,0.9)")),
+            marker=dict(color=ACC_COLORS[acc], line=dict(width=1, color="rgba(22,24,60,0.85)")),
             hovertemplate="%{x}<br>" + ACC_LABELS[acc] + ": %{y:,.0f}만원<extra></extra>",
         )
     totals = df_plot.groupby(x_col)["평가_만원"].sum().reindex(x_order).fillna(0)
@@ -419,8 +527,101 @@ def stacked_by_account(df_plot, x_col, x_order, height, label_last_only=False):
         textposition="top left" if label_last_only else "top center", textfont=dict(size=11), showlegend=False, cliponaxis=False,
         hovertemplate="%{x}<br>합계: %{y:,.0f}만원<extra></extra>",
     )
-    fig.update_layout(barmode="stack", yaxis_title="평가금액 (만원)")
+    fig.update_layout(barmode="stack")
     fig.update_yaxes(range=[0, max(totals.max(), 1) * 1.15], tickformat=",.0f")
+    return style_fig(fig, height)
+
+
+def build_month_end_trend(df, month_ends, usd_krw):
+    """
+    월말마다 계좌별 평가액을 계산.
+    - 그 달에 기록이 있는 계좌: 기록값 그대로 (상태 '기록')
+    - 그 달 기록이 없는 계좌: 직전 기록의 수량 × 그 월말 종가로 추정 (상태 '추정')
+    - 수량/종목코드가 없거나 시세 조회 실패: 직전 기록값 사용 (상태 '이월')
+    """
+    snaps, need_kr, need_us = [], set(), set()
+    for m in month_ends:
+        s = snapshot(df, m, usd_krw)
+        if s is None:
+            continue
+        acc_last = s.groupby("계좌ID")["날짜_dt"].transform("max")
+        same_month = (acc_last.dt.year == m.year) & (acc_last.dt.month == m.month)
+        s["상태"] = same_month.map({True: "기록", False: "이월"})
+        stale = s[(s["상태"] == "이월") & (s["수량"] > 0) & (s["시장"] != "")]
+        need_kr |= set(stale.loc[stale["시장"] == "KR", "종목코드"])
+        need_us |= set(stale.loc[stale["시장"] == "US", "종목코드"])
+        snaps.append((m, s))
+    if not snaps:
+        return None
+
+    start = (snaps[0][0] - pd.Timedelta(days=15)).strftime("%Y-%m-%d")
+    end = snaps[-1][0].strftime("%Y-%m-%d")
+    hist = get_price_history(tuple(sorted(need_kr)), tuple(sorted(need_us)), start, end)
+    fx_hist = hist.get("KRW=X", {})
+
+    out = []
+    for m, s in snaps:
+        fx_m = price_on(fx_hist, m) or usd_krw
+        usd = s["통화"].eq("USD")
+        s.loc[usd, "평가_원"] = s.loc[usd, "평가금액"].fillna(0) * fx_m
+        for i in s.index[(s["상태"] == "이월") & (s["수량"] > 0)]:
+            code = s.at[i, "종목코드"]
+            p = price_on(hist.get(code), m)
+            if p:
+                s.at[i, "평가_원"] = s.at[i, "수량"] * p * (fx_m if s.at[i, "시장"] == "US" else 1.0)
+                s.at[i, "상태"] = "추정"
+        out.append(s.assign(시점=m))
+    return pd.concat(out, ignore_index=True)
+
+
+STATUS_OPACITY = {"기록": 1.0, "실시간": 1.0, "추정": 0.7, "이월": 0.4}
+
+
+def trend_figure(trend, x_order, height):
+    """월말 추이 누적 막대. 상태(기록/추정/이월)에 따라 막대 진하기를 다르게."""
+    def seg_status(st_list):
+        st_set = set(st_list)
+        if "이월" in st_set:
+            return "이월"
+        if "추정" in st_set:
+            return "추정"
+        return "실시간" if "실시간" in st_set else "기록"
+
+    grp = (
+        trend.groupby(["라벨", "계좌유형"])
+        .agg(평가=("평가_원", "sum"), 상태=("상태", seg_status), 기준일=("날짜_dt", "max"))
+        .reset_index()
+    )
+    fig = go.Figure()
+    for acc in ACC_ORDER:
+        part = grp[grp["계좌유형"] == acc].set_index("라벨").reindex(x_order)
+        if part["평가"].fillna(0).sum() == 0:
+            continue
+        status = part["상태"].fillna("기록")
+        recdate = part["기준일"].dt.strftime("%y.%m.%d").fillna("-")
+        fig.add_bar(
+            x=x_order,
+            y=part["평가"].fillna(0) / 1e4,
+            name=ACC_LABELS[acc],
+            marker=dict(
+                color=ACC_COLORS[acc],
+                opacity=[STATUS_OPACITY[s] for s in status],
+                line=dict(width=1, color="rgba(22,24,60,0.85)"),
+            ),
+            customdata=list(zip(status, recdate)),
+            hovertemplate="%{x} · " + ACC_LABELS[acc]
+            + "<br>%{y:,.0f}만원<br>%{customdata[0]} (마지막 기록 %{customdata[1]})<extra></extra>",
+        )
+    totals = grp.groupby("라벨")["평가"].sum().reindex(x_order).fillna(0) / 1e4
+    fig.add_scatter(
+        x=x_order, y=totals, mode="text",
+        text=[f"{v:,.0f}" if i == len(totals) - 1 else "" for i, v in enumerate(totals)],
+        textposition="top left", textfont=dict(size=11), showlegend=False, cliponaxis=False,
+        hovertemplate="%{x}<br>합계: %{y:,.0f}만원<extra></extra>",
+    )
+    fig.update_layout(barmode="stack")
+    fig.update_yaxes(range=[0, max(totals.max(), 1) * 1.15], tickformat=",.0f")
+    fig.update_xaxes(type="category", tickangle=-45, tickfont=dict(size=10), automargin=True)
     return style_fig(fig, height)
 
 
@@ -431,10 +632,56 @@ TEMPLATE_CSV = (
     "2026-10-29,공동,CMA_01,6300000,6300000,0,,,네이버페이,,KRW\n"
 )
 
+SHARED_OWNERS = {"공동", "공통", "미지정", "가족"}
+
+
+def owners_title(df_all, df_snap):
+    """CSV 소유주명으로 제목 생성. 공동 계좌는 제외, CSV에 처음 나온 순서대로."""
+    current = set(df_snap["소유주명"])
+    names = [o for o in dict.fromkeys(df_all["소유주명"]) if o in current and o not in SHARED_OWNERS]
+    if not names:
+        return "우리 가족 자산"
+    if len(names) <= 3:
+        return " & ".join(names) + " 자산"
+    return f"{names[0]} 외 {len(names) - 1}명 자산"
+
+
+def render_head(target, title, sub):
+    target.markdown(
+        f'<div class="app-head"><div class="t">{title}</div><div class="s">{sub}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def items_html(item_grp, total):
+    top = item_grp.sort_values("평가_원", ascending=False)
+    vmax = max(top["평가_원"].max(), 1)
+    rows = []
+    for _, r in top.iterrows():
+        share = r["평가_원"] / total * 100 if total else 0
+        ret = (r["평가_원"] - r["매수_원"]) / r["매수_원"] * 100 if r["매수_원"] > 0 else None
+        if ret is None:
+            ret_txt = ""
+        else:
+            cls = "up" if ret > 0 else ("down" if ret < 0 else "")
+            ret_txt = f'<small class="{cls}">{ret:+.1f}%</small>'
+        bar = r["평가_원"] / vmax * 100
+        rows.append(
+            f'<div class="it" style="background:linear-gradient(90deg, rgba(140,124,255,0.22) {bar:.1f}%, '
+            f'transparent {bar:.1f}%);border-radius:8px;padding-left:8px;padding-right:8px">'
+            f'<span class="nm"><i class="dot" style="background:{ITEM_COLOR}"></i><span>{r["통합종목명"]}</span></span>'
+            f'<span class="v">{fmt_won(r["평가_원"])}<span class="pill">{share:.0f}%</span>{ret_txt}</span></div>'
+        )
+    return '<div class="items">' + "".join(rows) + "</div>"
+
+
 # =============================================================================
 # 화면
 # =============================================================================
-st.title("💰 성민 & 보현 자산 관제")
+with st.container(key="headrow"):
+    head_c1, head_c2 = st.columns([4, 1], vertical_alignment="center")
+head_box = head_c1.empty()
+render_head(head_box, "자산 관제", "보유 자산 CSV로 현재 자산을 추정합니다")
 
 # --- 보안 인증 (Streamlit Secrets) ---
 if "PASSWORD" not in st.secrets:
@@ -443,81 +690,76 @@ if "PASSWORD" not in st.secrets:
 SECRET_PASSWORD = str(st.secrets["PASSWORD"])
 
 if not st.session_state.get("authenticated", False):
-    st.markdown("### 🔒 보안 인증")
-    with st.form("login"):
-        entered_pw = st.text_input("접속 비밀번호", type="password")
-        ok = st.form_submit_button("접속하기", width="stretch")
-    if ok:
-        if entered_pw == SECRET_PASSWORD:
-            st.session_state["authenticated"] = True
-            st.rerun()
-        else:
-            st.error("비밀번호가 올바르지 않습니다.")
+    with st.container(key="glass_login"):
+        st.markdown("#### 🔒 보안 인증")
+        with st.form("login", border=False):
+            entered_pw = st.text_input("접속 비밀번호", type="password")
+            ok = st.form_submit_button("접속하기", width="stretch", type="primary")
+        if ok:
+            if entered_pw == SECRET_PASSWORD:
+                st.session_state["authenticated"] = True
+                st.rerun()
+            else:
+                st.error("비밀번호가 올바르지 않습니다.")
     st.stop()
 
-top_c1, top_c2 = st.columns([3, 1], vertical_alignment="center")
-top_c1.caption("✅ 시스템 정상 접속됨")
-if top_c2.button("잠금", width="stretch"):
+if head_c2.button("잠금", width="stretch"):
     st.session_state["authenticated"] = False
     st.rerun()
 
-st.divider()
+# 화면 순서: 대시보드가 위, 데이터 업로드는 아래 (업로드 후 결과가 먼저 보이도록)
+dash = st.container()
+data_box = st.container(key="glass_data")
 
 # --- 데이터 입력 ---
-st.subheader("📂 자산 데이터 업로드")
-uploaded = st.file_uploader(
-    "자산 대장 CSV 파일을 선택하세요",
-    type=["csv", "txt"],
-    help="엑셀에서 'CSV UTF-8' 또는 일반 'CSV'로 저장한 파일 모두 가능합니다.",
-)
-st.download_button(
-    "CSV 양식 내려받기", TEMPLATE_CSV.encode("utf-8-sig"),
-    file_name="자산대장_양식.csv", mime="text/csv", width="stretch",
-)
-
-show_settings = st.toggle("⚙️ 분석 기준일 · 환율 설정")
-analysis_date = datetime.date.today()
-usd_krw = get_usd_krw_rate()
-if show_settings:
-    analysis_date = st.date_input("분석 기준일", value=analysis_date)
-    usd_krw = st.number_input("원/달러 환율 (KRW/USD)", value=float(usd_krw), format="%.2f", step=1.0)
-    use_live = analysis_date >= datetime.date.today()
-    st.caption("기준일이 오늘이면 실시간 시세를 반영하고, 과거 날짜면 CSV에 적힌 평가금액을 그대로 씁니다.")
-else:
+with data_box:
+    st.markdown("#### 📂 자산 데이터")
+    uploaded = st.file_uploader(
+        "자산 대장 CSV 파일",
+        type=["csv", "txt"],
+        help="엑셀에서 'CSV UTF-8' 또는 일반 'CSV'로 저장한 파일 모두 가능합니다.",
+    )
+    st.download_button(
+        "CSV 양식 내려받기", TEMPLATE_CSV.encode("utf-8-sig"),
+        file_name="자산대장_양식.csv", mime="text/csv", width="stretch",
+    )
+    show_settings = st.toggle("⚙️ 분석 기준일 · 환율 설정")
+    analysis_date = datetime.date.today()
+    usd_krw = get_usd_krw_rate()
     use_live = True
-
-st.divider()
+    if show_settings:
+        analysis_date = st.date_input("분석 기준일", value=analysis_date)
+        usd_krw = st.number_input("원/달러 환율 (KRW/USD)", value=float(usd_krw), format="%.2f", step=1.0)
+        use_live = analysis_date >= datetime.date.today()
+        st.caption("기준일이 오늘이면 실시간 시세를 반영하고, 과거 날짜면 CSV에 적힌 평가금액을 그대로 씁니다.")
+    info_box = st.container()
 
 if uploaded is None:
-    st.info("👆 최신 자산 대장 CSV 파일을 업로드해 주세요.")
+    info_box.info("최신 자산 대장 CSV 파일을 업로드해 주세요.")
     st.stop()
 
 # --- 파일 읽기 ---
 try:
     text, used_enc = decode_bytes(uploaded.getvalue())
     df_loaded = pd.read_csv(io.StringIO(text), dtype=str, skip_blank_lines=True)
-except Exception as e:
-    st.error(f"CSV 파일을 읽지 못했습니다: {e}")
-    st.stop()
-
-try:
     df, notes = prepare_data(df_loaded)
 except Exception as e:
-    st.error(f"데이터 정리 중 오류가 발생했습니다: {e}")
+    info_box.error(f"CSV 파일을 읽지 못했습니다: {e}")
     st.stop()
 
 if df.empty:
-    st.warning("분석할 데이터가 없습니다. CSV 내용을 확인해 주세요.")
+    info_box.warning("분석할 데이터가 없습니다. CSV 내용을 확인해 주세요.")
     st.stop()
 
-st.caption(f"📄 {uploaded.name} · {len(df):,}행 · 인코딩 {used_enc} · 환율 {usd_krw:,.2f}원")
-for n in notes:
-    st.caption(f"ℹ️ {n}")
+with info_box:
+    st.caption(f"📄 {uploaded.name} · {len(df):,}행 · 인코딩 {used_enc} · 환율 {usd_krw:,.2f}원")
+    for n in notes:
+        st.caption(f"ℹ️ {n}")
 
 curr_dt = pd.Timestamp(analysis_date)
 
 # --- 현재 스냅샷 (실시간 시세) ---
-with st.spinner("⚡ 실시간 시세 반영 중..."):
+with dash, st.spinner("⚡ 실시간 시세 반영 중..."):
     base = snapshot(df, curr_dt, usd_krw)
     live = {}
     if base is not None and use_live:
@@ -528,13 +770,14 @@ with st.spinner("⚡ 실시간 시세 반영 중..."):
     df_curr = snapshot(df, curr_dt, usd_krw, live_prices=live)
 
 if df_curr is None or df_curr.empty:
-    st.warning(f"{analysis_date} 이전 데이터가 없습니다.")
+    dash.warning(f"{analysis_date} 이전 데이터가 없습니다.")
     st.stop()
 
 eval_curr = df_curr["평가_원"].sum()
 buy_curr = df_curr["매수_원"].sum()
 gain_curr = eval_curr - buy_curr
 ret_curr = gain_curr / buy_curr * 100 if buy_curr > 0 else 0.0
+live_cnt = int(df_curr["시세반영"].sum())
 
 
 def eval_at(days):
@@ -545,105 +788,109 @@ def eval_at(days):
 eval_m6, eval_y1 = eval_at(182), eval_at(365)
 
 
-def change_sub(prev):
+def change_card(label, prev):
     if not prev:
-        return "비교 데이터 없음"
-    return signed(eval_curr - prev, (eval_curr - prev) / prev * 100)
+        return {"label": label, "value": "-", "sub": "비교 데이터 없음"}
+    diff = eval_curr - prev
+    pct = diff / prev * 100
+    cls = "up" if diff > 0 else ("down" if diff < 0 else "")
+    arrow = "▲" if diff > 0 else ("▼" if diff < 0 else "")
+    return {
+        "label": label,
+        "value": f'<span class="{cls}">{pct:+.1f}%</span>',
+        "sub": f'<span class="{cls}">{arrow} {fmt_won(abs(diff))}</span> · {fmt_won(prev)}에서',
+    }
 
 
-st.subheader(f"📊 자산 현황 요약 ({analysis_date:%Y-%m-%d})")
-live_cnt = int(df_curr["시세반영"].sum())
-kpi_cards([
-    {"label": "현재 총 평가액", "value": f"{fmt_won(eval_curr)}원", "sub": f"{eval_curr:,.0f} 원", "wide": True},
-    {"label": "총 매수 원금", "value": f"{fmt_won(buy_curr)}원"},
-    {"label": "총 평가 손익", "value": signed(gain_curr), "sub": f"수익률 {ret_curr:+.2f}%"},
-    {"label": "6개월 전 대비", "value": f"{fmt_won(eval_m6)}원" if eval_m6 else "-", "sub": change_sub(eval_m6)},
-    {"label": "1년 전 대비", "value": f"{fmt_won(eval_y1)}원" if eval_y1 else "-", "sub": change_sub(eval_y1)},
-])
-st.caption(f"실시간 시세 반영 {live_cnt}개 종목 / 전체 {len(df_curr)}개 (나머지는 CSV 평가금액 사용)")
-
-st.divider()
-
-# ① 총자산 추이 (기록된 모든 날짜 + 현재)
-st.markdown("### ① 총자산 추이")
-dates = sorted(df.loc[df["날짜_dt"] <= curr_dt, "날짜_dt"].unique())
-trend_rows = []
-labels = []
-for d in dates:
-    s = snapshot(df, pd.Timestamp(d), usd_krw)
-    # 연도가 바뀌는 첫 시점에는 연도 표시 (예: 26/01/06), 나머지는 월/일만
-    ts = pd.Timestamp(d)
-    lbl = ts.strftime("%y/%m/%d") if (not labels or ts.year != prev_year) else ts.strftime("%m/%d")
-    prev_year = ts.year
-    labels.append(lbl)
-    for acc, v in s.groupby("계좌유형")["평가_원"].sum().items():
-        trend_rows.append({"시점": lbl, "계좌유형": acc, "평가_만원": v / 1e4})
-now_lbl = "현재" if use_live else analysis_date.strftime("%m/%d")
-if now_lbl not in labels:
-    labels.append(now_lbl)
-    for acc, v in df_curr.groupby("계좌유형")["평가_원"].sum().items():
-        trend_rows.append({"시점": now_lbl, "계좌유형": acc, "평가_만원": v / 1e4})
-
-if trend_rows:
-    recent = labels[-12:]  # 모바일 가독성을 위해 최근 12개 시점만
-    df_t = pd.DataFrame(trend_rows)
-    fig1 = stacked_by_account(df_t[df_t["시점"].isin(recent)], "시점", recent, 420, label_last_only=True)
-    fig1.update_xaxes(tickangle=-45, type="category", automargin=True)
-    st.plotly_chart(fig1, config=PLOTLY_CONFIG)
-    if len(labels) > 12:
-        st.caption(f"최근 12개 시점만 표시 (전체 {len(labels)}개)")
-
-# ② 인물별 자산 현황
-st.markdown("### ② 인물별 자산 현황")
-owner_grp = df_curr.groupby(["소유주명", "계좌유형"])["평가_원"].sum().reset_index()
-owner_grp["평가_만원"] = owner_grp["평가_원"] / 1e4
-owners = owner_grp.groupby("소유주명")["평가_만원"].sum().sort_values(ascending=False).index.tolist()
-fig2 = stacked_by_account(owner_grp, "소유주명", owners, 360)
-st.plotly_chart(fig2, config=PLOTLY_CONFIG)
-
-# ③ 주요 종목별 자산 현황
-st.markdown("### ③ 주요 종목별 자산 현황")
-df_curr["통합종목명"] = df_curr["종목"].map(map_underlying_asset)
-item_grp = df_curr.groupby("통합종목명")[["평가_원", "매수_원"]].sum().reset_index()
-item_grp["비중"] = item_grp["평가_원"] / eval_curr * 100 if eval_curr else 0
-main_items = item_grp[item_grp["비중"] > 1.0].sort_values("평가_원")
-if not main_items.empty:
-    vals = main_items["평가_원"] / 1e4
-    fig3 = go.Figure(go.Bar(
-        x=vals, y=main_items["통합종목명"], orientation="h",
-        marker=dict(color=ACC_COLORS["ISA"]),
-        text=[f"{v:,.0f}만·{p:.0f}%" for v, p in zip(vals, main_items["비중"])],
-        textposition="outside", cliponaxis=False,
-        hovertemplate="%{y}<br>%{x:,.0f}만원<extra></extra>",
-    ))
-    style_fig(fig3, max(320, len(main_items) * 38 + 40))
-    fig3.update_layout(showlegend=False, xaxis_title="평가금액 (만원)", margin=dict(l=8, r=8, t=10, b=8))
-    fig3.update_xaxes(range=[0, vals.max() * 1.6], showgrid=True, gridcolor="rgba(128,128,128,0.18)")
-    fig3.update_yaxes(showgrid=False, automargin=True)
-    st.plotly_chart(fig3, config=PLOTLY_CONFIG)
-    small = item_grp[item_grp["비중"] <= 1.0]
-    if not small.empty:
-        st.caption(f"비중 1% 이하 {len(small)}개 종목은 생략 (합계 {fmt_won(small['평가_원'].sum())}원)")
-
-# ④ 계좌별 상세
-st.markdown("### ④ 계좌별 상세")
-acc_tbl = (
-    df_curr.groupby(["계좌ID", "소유주명"])
-    .agg(기준일=("날짜_dt", "max"), 평가=("평가_원", "sum"), 원금=("매수_원", "sum"), 실시간=("시세반영", "any"))
-    .reset_index()
-    .sort_values("평가", ascending=False)
+# 제목: CSV 소유주명 기준
+sub = f"{analysis_date.month}월 {analysis_date.day}일 · " + (
+    f"실시간 시세 {live_cnt}개 종목 반영" if use_live else "CSV 기록 기준"
 )
-acc_tbl["수익률"] = ((acc_tbl["평가"] - acc_tbl["원금"]) / acc_tbl["원금"].where(acc_tbl["원금"] > 0) * 100).round(1)
-acc_tbl["평가(만원)"] = (acc_tbl["평가"] / 1e4).round(0)
-acc_tbl["기준일"] = acc_tbl["기준일"].dt.strftime("%y.%m.%d")
-acc_tbl["실시간"] = acc_tbl["실시간"].map({True: "O", False: "-"})
-st.dataframe(
-    acc_tbl[["계좌ID", "평가(만원)", "수익률", "기준일", "실시간", "소유주명"]],
-    hide_index=True,
-    width="stretch",
-    column_config={
-        "평가(만원)": st.column_config.NumberColumn(format="localized"),
-        "수익률": st.column_config.NumberColumn("수익률(%)", format="%.1f"),
-    },
-)
-st.caption("기준일 = 그 계좌를 CSV에 마지막으로 기록한 날짜. 오래된 계좌는 새로 기록해 주세요.")
+render_head(head_box, owners_title(df, df_curr), sub)
+
+with dash:
+    gain_cls = "up" if gain_curr > 0 else ("down" if gain_curr < 0 else "")
+    gain_arrow = "▲" if gain_curr > 0 else ("▼" if gain_curr < 0 else "")
+    kpi_cards([
+        {
+            "label": "총 평가액",
+            "value": f"{fmt_won(eval_curr)}원",
+            "sub": f'<span class="{gain_cls}">{gain_arrow} {fmt_won(abs(gain_curr))}원 ({ret_curr:+.2f}%)</span>'
+                   f" · 원금 {fmt_won(buy_curr)}원",
+            "wide": True,
+        },
+        change_card("6개월 전 대비", eval_m6),
+        change_card("1년 전 대비", eval_y1),
+    ])
+
+    # ① 총자산 추이 (최근 12개월 월말 + 현재)
+    with st.container(key="glass_trend"):
+        st.markdown("#### 총자산 추이 (월말 · 만원)")
+        first_dt = df["날짜_dt"].min()
+        month_ends = [
+            m for m in pd.date_range(end=curr_dt, periods=13, freq=pd.offsets.MonthEnd())
+            if first_dt <= m < curr_dt.normalize()
+        ][-12:]
+        with st.spinner("📈 월말 시세 조회 중..."):
+            trend = build_month_end_trend(df, month_ends, usd_krw)
+
+        now_lbl = "현재" if use_live else analysis_date.strftime("%y.%m.%d")
+        now_part = df_curr.assign(시점=curr_dt, 상태=df_curr["시세반영"].map({True: "실시간", False: "기록"}))
+        trend = pd.concat([t for t in (trend, now_part) if t is not None], ignore_index=True)
+        trend["라벨"] = [now_lbl if t == curr_dt else t.strftime("%y.%m") for t in trend["시점"]]
+        x_order = [m.strftime("%y.%m") for m in month_ends] + [now_lbl]
+        x_order = [x for x in x_order if x in set(trend["라벨"])]
+
+        st.plotly_chart(trend_figure(trend, x_order, 400), config=PLOTLY_CONFIG, theme=None)
+        past = trend[trend["시점"] != curr_dt]
+        n_est = int((past["상태"] == "추정").sum())
+        n_carry = int((past["상태"] == "이월").sum())
+        st.caption(
+            "진한 막대 = 그 달 기록 · 중간 = 월말 시세로 추정 · 연한 막대 = 직전 기록 사용"
+            f" (추정 {n_est}건 · 직전값 {n_carry}건)"
+        )
+
+    # ② 소유주별 자산 현황
+    with st.container(key="glass_owner"):
+        st.markdown("#### 소유주별 자산 (만원)")
+        owner_grp = df_curr.groupby(["소유주명", "계좌유형"])["평가_원"].sum().reset_index()
+        owner_grp["평가_만원"] = owner_grp["평가_원"] / 1e4
+        owners = owner_grp.groupby("소유주명")["평가_만원"].sum().sort_values(ascending=False).index.tolist()
+        st.plotly_chart(stacked_by_account(owner_grp, "소유주명", owners, 340), config=PLOTLY_CONFIG, theme=None)
+
+    # ③ 주요 종목
+    with st.container(key="glass_items"):
+        st.markdown("#### 주요 종목")
+        df_curr["통합종목명"] = df_curr["종목"].map(map_underlying_asset)
+        item_grp = df_curr.groupby("통합종목명")[["평가_원", "매수_원"]].sum().reset_index()
+        share = item_grp["평가_원"] / eval_curr * 100 if eval_curr else 0
+        main_items = item_grp[share > 1.0]
+        small = item_grp[share <= 1.0]
+        if not main_items.empty:
+            st.markdown(items_html(main_items, eval_curr), unsafe_allow_html=True)
+        if not small.empty:
+            st.caption(f"비중 1% 이하 {len(small)}개 종목 생략 (합계 {fmt_won(small['평가_원'].sum())}원)")
+
+    # ④ 계좌별 상세
+    with st.container(key="glass_accounts"):
+        st.markdown("#### 계좌별 상세")
+        acc_tbl = (
+            df_curr.groupby(["계좌ID", "소유주명"])
+            .agg(기준일=("날짜_dt", "max"), 평가=("평가_원", "sum"), 원금=("매수_원", "sum"), 실시간=("시세반영", "any"))
+            .reset_index()
+            .sort_values("평가", ascending=False)
+        )
+        acc_tbl["수익률"] = ((acc_tbl["평가"] - acc_tbl["원금"]) / acc_tbl["원금"].where(acc_tbl["원금"] > 0) * 100).round(1)
+        acc_tbl["평가(만원)"] = (acc_tbl["평가"] / 1e4).round(0)
+        acc_tbl["기준일"] = acc_tbl["기준일"].dt.strftime("%y.%m.%d")
+        acc_tbl["실시간"] = acc_tbl["실시간"].map({True: "O", False: "-"})
+        st.dataframe(
+            acc_tbl[["계좌ID", "평가(만원)", "수익률", "기준일", "실시간", "소유주명"]],
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "평가(만원)": st.column_config.NumberColumn(format="localized"),
+                "수익률": st.column_config.NumberColumn("수익률(%)", format="%.1f"),
+            },
+        )
+        st.caption("기준일 = 그 계좌를 CSV에 마지막으로 기록한 날짜. 오래된 계좌는 새로 기록해 주세요.")

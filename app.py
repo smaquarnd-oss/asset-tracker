@@ -135,7 +135,14 @@ hr { border-color: rgba(255, 255, 255, 0.12) !important; }
 
 # 계좌 유형별 색 (검증된 범주형 팔레트 1~5번, 고정 순서)
 ACC_ORDER = ["ISA", "PSA", "IRP", "CA", "CMA"]
-ACC_COLORS = {"ISA": "#3987e5", "PSA": "#d95926", "IRP": "#199e70", "CA": "#c98500", "CMA": "#d55181"}  # 어두운 배경용 단계
+ACC_COLORS = {"ISA": "#60a5fa", "PSA": "#34d399", "IRP": "#c084fc", "CA": "#fbbf24", "CMA": "#f472b6"}  # 색약 구분 검사 통과 순서
+BAR_ALPHA = 0.55  # 반투명 유리 막대 채우기 진하기 (테두리는 원색)
+
+
+def glass_fill(hex_color, alpha=BAR_ALPHA):
+    h = hex_color.lstrip("#")
+    return f"rgba({int(h[0:2], 16)},{int(h[2:4], 16)},{int(h[4:6], 16)},{alpha})"
+
 ACC_LABELS = {"ISA": "ISA", "PSA": "연금저축(PSA)", "IRP": "IRP", "CA": "일반(CA)", "CMA": "현금(CMA)"}
 
 STD_COLS = ["날짜", "소유주명", "계좌ID", "평가금액", "매수금액", "평가손익", "수량", "평균단가", "종목", "종목코드", "통화"]
@@ -516,7 +523,7 @@ def stacked_by_account(df_plot, x_col, x_order, height, label_last_only=False):
             x=x_order,
             y=part["평가_만원"].fillna(0),
             name=ACC_LABELS[acc],
-            marker=dict(color=ACC_COLORS[acc], line=dict(width=1, color="rgba(22,24,60,0.85)")),
+            marker=dict(color=glass_fill(ACC_COLORS[acc]), line=dict(width=1.5, color=ACC_COLORS[acc])),
             hovertemplate="%{x}<br>" + ACC_LABELS[acc] + ": %{y:,.0f}만원<extra></extra>",
         )
     totals = df_plot.groupby(x_col)["평가_만원"].sum().reindex(x_order).fillna(0)
@@ -574,7 +581,7 @@ def build_month_end_trend(df, month_ends, usd_krw):
     return pd.concat(out, ignore_index=True)
 
 
-STATUS_OPACITY = {"기록": 1.0, "실시간": 1.0, "추정": 0.7, "이월": 0.4}
+STATUS_OPACITY = {"기록": 1.0, "실시간": 1.0, "추정": 0.75, "이월": 0.5}
 
 
 def trend_figure(trend, x_order, height):
@@ -604,9 +611,9 @@ def trend_figure(trend, x_order, height):
             y=part["평가"].fillna(0) / 1e4,
             name=ACC_LABELS[acc],
             marker=dict(
-                color=ACC_COLORS[acc],
+                color=glass_fill(ACC_COLORS[acc]),
                 opacity=[STATUS_OPACITY[s] for s in status],
-                line=dict(width=1, color="rgba(22,24,60,0.85)"),
+                line=dict(width=1.5, color=ACC_COLORS[acc]),
             ),
             customdata=list(zip(status, recdate)),
             hovertemplate="%{x} · " + ACC_LABELS[acc]
@@ -823,40 +830,57 @@ with dash:
         change_card("1년 전 대비", eval_y1),
     ])
 
-    # ① 총자산 추이 (최근 12개월 월말 + 현재)
+    # ① 총자산 추이 (기간 선택: 6개월·1년 = 월말, 전체 = 분기말)
     with st.container(key="glass_trend"):
-        st.markdown("#### 총자산 추이 (월말 · 만원)")
+        st.markdown("#### 총자산 추이 (만원)")
+        period = st.segmented_control(
+            "기간", ["6개월", "1년", "전체"], default="6개월",
+            key="trend_period", label_visibility="collapsed",
+        ) or "6개월"
         first_dt = df["날짜_dt"].min()
-        month_ends = [
-            m for m in pd.date_range(end=curr_dt, periods=13, freq=pd.offsets.MonthEnd())
-            if first_dt <= m < curr_dt.normalize()
-        ][-12:]
-        with st.spinner("📈 월말 시세 조회 중..."):
-            trend = build_month_end_trend(df, month_ends, usd_krw)
+        today_cut = curr_dt.normalize()
+        if period == "전체":
+            ends = [q for q in pd.date_range(start=first_dt, end=curr_dt, freq=pd.offsets.QuarterEnd()) if q < today_cut]
+            basis = "분기말"
+        else:
+            n = 6 if period == "6개월" else 12
+            ends = [
+                m for m in pd.date_range(end=curr_dt, periods=n + 1, freq=pd.offsets.MonthEnd())
+                if first_dt <= m < today_cut
+            ][-n:]
+            basis = "월말"
+        with st.spinner(f"📈 {basis} 시세 조회 중..."):
+            trend = build_month_end_trend(df, ends, usd_krw)
 
         now_lbl = "현재" if use_live else analysis_date.strftime("%y.%m.%d")
         now_part = df_curr.assign(시점=curr_dt, 상태=df_curr["시세반영"].map({True: "실시간", False: "기록"}))
         trend = pd.concat([t for t in (trend, now_part) if t is not None], ignore_index=True)
         trend["라벨"] = [now_lbl if t == curr_dt else t.strftime("%y.%m") for t in trend["시점"]]
-        x_order = [m.strftime("%y.%m") for m in month_ends] + [now_lbl]
+        x_order = [m.strftime("%y.%m") for m in ends] + [now_lbl]
         x_order = [x for x in x_order if x in set(trend["라벨"])]
 
-        st.plotly_chart(trend_figure(trend, x_order, 400), config=PLOTLY_CONFIG, theme=None)
+        st.plotly_chart(trend_figure(trend, x_order, 380), config=PLOTLY_CONFIG, theme=None)
         past = trend[trend["시점"] != curr_dt]
         n_est = int((past["상태"] == "추정").sum())
         n_carry = int((past["상태"] == "이월").sum())
         st.caption(
-            "진한 막대 = 그 달 기록 · 중간 = 월말 시세로 추정 · 연한 막대 = 직전 기록 사용"
+            f"{basis} 기준 · 진한 막대 = 그 달 기록 · 중간 = {basis} 시세로 추정 · 연한 막대 = 직전 기록 사용"
             f" (추정 {n_est}건 · 직전값 {n_carry}건)"
         )
 
-    # ② 소유주별 자산 현황
+    # ② 소유주별 자산 (기준일 + 소유주별 마지막 기록일)
     with st.container(key="glass_owner"):
-        st.markdown("#### 소유주별 자산 (만원)")
+        basis_txt = f"{analysis_date.month}월 {analysis_date.day}일 기준" + (" · 실시간 시세" if use_live and live_cnt else "")
+        st.markdown(f"#### 소유주별 자산 (만원)\n<span style='font-size:0.78rem;color:var(--ink-2)'>{basis_txt}</span>",
+                    unsafe_allow_html=True)
         owner_grp = df_curr.groupby(["소유주명", "계좌유형"])["평가_원"].sum().reset_index()
         owner_grp["평가_만원"] = owner_grp["평가_원"] / 1e4
         owners = owner_grp.groupby("소유주명")["평가_만원"].sum().sort_values(ascending=False).index.tolist()
-        st.plotly_chart(stacked_by_account(owner_grp, "소유주명", owners, 340), config=PLOTLY_CONFIG, theme=None)
+        last_rec = df_curr.groupby("소유주명")["날짜_dt"].max()
+        tick_text = [f"{o}<br><span style='font-size:9px'>{last_rec[o]:%y.%m.%d} 기록</span>" for o in owners]
+        fig2 = stacked_by_account(owner_grp, "소유주명", owners, 340)
+        fig2.update_xaxes(tickmode="array", tickvals=owners, ticktext=tick_text)
+        st.plotly_chart(fig2, config=PLOTLY_CONFIG, theme=None)
 
     # ③ 주요 종목
     with st.container(key="glass_items"):
@@ -870,27 +894,3 @@ with dash:
             st.markdown(items_html(main_items, eval_curr), unsafe_allow_html=True)
         if not small.empty:
             st.caption(f"비중 1% 이하 {len(small)}개 종목 생략 (합계 {fmt_won(small['평가_원'].sum())}원)")
-
-    # ④ 계좌별 상세
-    with st.container(key="glass_accounts"):
-        st.markdown("#### 계좌별 상세")
-        acc_tbl = (
-            df_curr.groupby(["계좌ID", "소유주명"])
-            .agg(기준일=("날짜_dt", "max"), 평가=("평가_원", "sum"), 원금=("매수_원", "sum"), 실시간=("시세반영", "any"))
-            .reset_index()
-            .sort_values("평가", ascending=False)
-        )
-        acc_tbl["수익률"] = ((acc_tbl["평가"] - acc_tbl["원금"]) / acc_tbl["원금"].where(acc_tbl["원금"] > 0) * 100).round(1)
-        acc_tbl["평가(만원)"] = (acc_tbl["평가"] / 1e4).round(0)
-        acc_tbl["기준일"] = acc_tbl["기준일"].dt.strftime("%y.%m.%d")
-        acc_tbl["실시간"] = acc_tbl["실시간"].map({True: "O", False: "-"})
-        st.dataframe(
-            acc_tbl[["계좌ID", "평가(만원)", "수익률", "기준일", "실시간", "소유주명"]],
-            hide_index=True,
-            width="stretch",
-            column_config={
-                "평가(만원)": st.column_config.NumberColumn(format="localized"),
-                "수익률": st.column_config.NumberColumn("수익률(%)", format="%.1f"),
-            },
-        )
-        st.caption("기준일 = 그 계좌를 CSV에 마지막으로 기록한 날짜. 오래된 계좌는 새로 기록해 주세요.")

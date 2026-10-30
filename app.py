@@ -124,6 +124,67 @@ html, body, .stApp, .stMarkdown, .stCaption, p, h1, h2, h3, h4, label, input, bu
 hr { border-color: rgba(255, 255, 255, 0.12) !important; }
 [data-testid="stCaptionContainer"] { color: var(--ink-2) !important; }
 
+/* 버튼: 유리 톤 + 눌렀을 때도 글자가 잘 보이도록 상태별 색 고정 */
+[data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-secondaryFormSubmit"],
+[data-testid="stDownloadButton"] button {
+    background: rgba(255, 255, 255, 0.10) !important;
+    border: 1px solid rgba(255, 255, 255, 0.24) !important;
+    color: var(--ink) !important;
+    border-radius: 12px !important;
+    font-weight: 500;
+}
+[data-testid="stBaseButton-secondary"]:hover, [data-testid="stBaseButton-secondaryFormSubmit"]:hover,
+[data-testid="stDownloadButton"] button:hover {
+    background: rgba(140, 124, 255, 0.22) !important;
+    border-color: rgba(167, 150, 255, 0.85) !important;
+    color: #ffffff !important;
+}
+[data-testid="stBaseButton-secondary"]:active, [data-testid="stBaseButton-secondary"]:focus,
+[data-testid="stBaseButton-secondaryFormSubmit"]:active, [data-testid="stBaseButton-secondaryFormSubmit"]:focus,
+[data-testid="stDownloadButton"] button:active, [data-testid="stDownloadButton"] button:focus {
+    background: rgba(140, 124, 255, 0.40) !important;
+    border-color: #a796ff !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+}
+[data-testid="stBaseButton-secondary"] p, [data-testid="stDownloadButton"] button p { color: inherit !important; }
+
+[data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {
+    background: linear-gradient(135deg, #8c7cff, #6a5ae0) !important;
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    color: #ffffff !important;
+    border-radius: 12px !important;
+    font-weight: 700;
+}
+[data-testid="stBaseButton-primary"]:hover, [data-testid="stBaseButton-primaryFormSubmit"]:hover {
+    background: linear-gradient(135deg, #9d8fff, #7a6af0) !important;
+    color: #ffffff !important;
+}
+
+/* 기간 선택 (6개월 | 1년 | 전체) - Streamlit 버전별 마크업 모두 대응 */
+[data-testid="stButtonGroup"] button,
+[data-testid="stBaseButton-segmented_control"] {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.20) !important;
+    color: var(--ink-2) !important;
+}
+[data-testid="stButtonGroup"] button:hover,
+[data-testid="stBaseButton-segmented_control"]:hover {
+    background: rgba(140, 124, 255, 0.18) !important;
+    color: #ffffff !important;
+}
+[data-testid="stButtonGroup"] button[aria-checked="true"],
+[data-testid="stButtonGroup"] button[data-selected="true"],
+[data-testid="stBaseButton-segmented_controlActive"] {
+    background: linear-gradient(135deg, #8c7cff, #6a5ae0) !important;
+    border-color: #a796ff !important;
+    color: #ffffff !important;
+    font-weight: 700;
+}
+[data-testid="stButtonGroup"] button p,
+[data-testid="stBaseButton-segmented_control"] p,
+[data-testid="stBaseButton-segmented_controlActive"] p { color: inherit !important; font-weight: inherit; }
+
 /* 제목 줄: 모바일에서도 제목과 잠금 버튼을 한 줄에 */
 .st-key-headrow [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; gap: 8px; }
 .st-key-headrow [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; }
